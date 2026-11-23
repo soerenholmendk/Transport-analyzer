@@ -226,7 +226,7 @@ CLASS lcl_report IMPLEMENTATION.
       APPEND ls_out TO mt_out.
     ENDLOOP.
 
-    SORT mt_out BY chdate DESCENDING trkorr DESCENDING.
+    SORT mt_out BY as4text trkorr.
   ENDMETHOD.
 
   METHOD read_cofile.
@@ -235,7 +235,6 @@ CLASS lcl_report IMPLEMENTATION.
       EXPORTING
         iv_trkorr    = iv_trkorr
         iv_dir_type  = 'T'
-        iv_translate = abap_true
       IMPORTING
         es_cofile    = rs_cofile.
   ENDMETHOD.
@@ -327,6 +326,14 @@ CLASS lcl_report IMPLEMENTATION.
     mo_alv->get_display_settings( )->set_striped_pattern( abap_true ).
     mo_alv->get_display_settings( )->set_list_header(
       |Transport status in landscape ({ lines( mt_out ) } requests)| ).
+
+    " Standard sorting: description, then transport number
+    TRY.
+        DATA(lo_sorts) = mo_alv->get_sorts( ).
+        lo_sorts->add_sort( columnname = 'AS4TEXT' sequence = if_salv_c_sort=>sort_up ).
+        lo_sorts->add_sort( columnname = 'TRKORR'  sequence = if_salv_c_sort=>sort_up ).
+      CATCH cx_salv_not_found cx_salv_existing cx_salv_data_error.
+    ENDTRY.
 
     DATA(lo_cols) = mo_alv->get_columns( ).
     lo_cols->set_optimize( abap_true ).
