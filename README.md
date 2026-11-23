@@ -6,8 +6,9 @@ ABAP report `ZTR_LANDSCAPE_STATUS` that runs in the development system and check
 - Selection by transport number, owner (incl. task owners), last changed/released date (E070-AS4DATE) and request type (K/W/T by default)
 - Filter: all / open only / released only
 - Up to 3 target systems (default QAS, PRD)
-- Per system: traffic light, return code and import date (read from the transport cofile, same data as the STMS import history)
+- Per system: traffic light, return code, import date and import time (read from the transport cofile, same data as the STMS import history)
 - Analysis column: open, waiting for import, imported everywhere, import error, or wrong import sequence (e.g. in PRD but not QAS)
+- Sequence column: green if each system was imported later (date + time) than the system before it (e.g. PRD after QAS), red otherwise, empty if there is nothing to compare yet
 - Option to show only requests that are not fully imported
 - Hotspot on the request number opens the request display (SE09)
 

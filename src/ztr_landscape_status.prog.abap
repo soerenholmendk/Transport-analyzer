@@ -54,13 +54,17 @@ CLASS lcl_report DEFINITION FINAL.
              s1_icon    TYPE icon_d,
              s1_rc      TYPE char4,
              s1_date    TYPE d,
+             s1_time    TYPE t,
              s2_icon    TYPE icon_d,
              s2_rc      TYPE char4,
              s2_date    TYPE d,
+             s2_time    TYPE t,
              s3_icon    TYPE icon_d,
              s3_rc      TYPE char4,
              s3_date    TYPE d,
+             s3_time    TYPE t,
              analysis   TYPE char80,
+             seq_icon   TYPE icon_d,   " import sequence check (date/time)
            END OF ty_out,
            tt_out TYPE STANDARD TABLE OF ty_out WITH EMPTY KEY.
 
@@ -81,6 +85,7 @@ CLASS lcl_report DEFINITION FINAL.
              imported TYPE abap_bool,
              rc       TYPE i,
              date     TYPE d,
+             time     TYPE t,
            END OF ty_sys_status,
            tt_sys_status TYPE STANDARD TABLE OF ty_sys_status WITH EMPTY KEY.
 
@@ -102,7 +107,12 @@ CLASS lcl_report DEFINITION FINAL.
                 iv_rel    TYPE abap_bool
       EXPORTING ev_icon   TYPE icon_d
                 ev_rc     TYPE char4
-                ev_date   TYPE d.
+                ev_date   TYPE d
+                ev_time   TYPE t.
+    METHODS check_sequence
+      IMPORTING it_status      TYPE tt_sys_status
+                iv_rel         TYPE abap_bool
+      RETURNING VALUE(rv_icon) TYPE icon_d.
     METHODS analyse
       IMPORTING it_status TYPE tt_sys_status
                 iv_rel    TYPE abap_bool
@@ -209,15 +219,16 @@ CLASS lcl_report IMPLEMENTATION.
         ( get_sys_status( is_cofile = ls_cofile iv_sysid = p_sys3 ) ) ).
 
       fill_sys_cols( EXPORTING is_status = lt_status[ 1 ] iv_rel = lv_rel
-                     IMPORTING ev_icon = ls_out-s1_icon ev_rc = ls_out-s1_rc ev_date = ls_out-s1_date ).
+                     IMPORTING ev_icon = ls_out-s1_icon ev_rc = ls_out-s1_rc ev_date = ls_out-s1_date ev_time = ls_out-s1_time ).
       fill_sys_cols( EXPORTING is_status = lt_status[ 2 ] iv_rel = lv_rel
-                     IMPORTING ev_icon = ls_out-s2_icon ev_rc = ls_out-s2_rc ev_date = ls_out-s2_date ).
+                     IMPORTING ev_icon = ls_out-s2_icon ev_rc = ls_out-s2_rc ev_date = ls_out-s2_date ev_time = ls_out-s2_time ).
       fill_sys_cols( EXPORTING is_status = lt_status[ 3 ] iv_rel = lv_rel
-                     IMPORTING ev_icon = ls_out-s3_icon ev_rc = ls_out-s3_rc ev_date = ls_out-s3_date ).
+                     IMPORTING ev_icon = ls_out-s3_icon ev_rc = ls_out-s3_rc ev_date = ls_out-s3_date ev_time = ls_out-s3_time ).
 
       DELETE lt_status WHERE sysid IS INITIAL.
       analyse( EXPORTING it_status = lt_status iv_rel = lv_rel
                CHANGING  cs_out    = ls_out ).
+      ls_out-seq_icon = check_sequence( it_status = lt_status iv_rel = lv_rel ).
 
       IF p_miss = abap_true AND ls_out-overall = icon_green_light.
         CONTINUE.
@@ -256,15 +267,18 @@ CLASS lcl_report IMPLEMENTATION.
 
       LOOP AT ls_step-actions INTO DATA(ls_action).
         rs_status-rc = nmax( val1 = rs_status-rc val2 = CONV i( ls_action-rc ) ).
-        IF ls_action-date > rs_status-date.
+        " Keep the latest import date/time in this system
+        IF ls_action-date > rs_status-date OR
+           ( ls_action-date = rs_status-date AND ls_action-time > rs_status-time ).
           rs_status-date = ls_action-date.
+          rs_status-time = ls_action-time.
         ENDIF.
       ENDLOOP.
     ENDLOOP.
   ENDMETHOD.
 
   METHOD fill_sys_cols.
-    CLEAR: ev_icon, ev_rc, ev_date.
+    CLEAR: ev_icon, ev_rc, ev_date, ev_time.
     CHECK is_status-sysid IS NOT INITIAL AND iv_rel = abap_true.
 
     IF is_status-imported = abap_false.
@@ -274,9 +288,50 @@ CLASS lcl_report IMPLEMENTATION.
 
     ev_rc   = |{ is_status-rc }|.
     ev_date = is_status-date.
+    ev_time = is_status-time.
     ev_icon = COND #( WHEN is_status-rc = 0 THEN icon_green_light
                       WHEN is_status-rc = 4 THEN icon_yellow_light
                       ELSE                       icon_red_light ).
+  ENDMETHOD.
+
+  METHOD check_sequence.
+    " Green: each selected system was imported LATER (date + time) than the
+    "        system before it (e.g. PRD after QAS).
+    " Red:   a system was imported earlier than (or at the same time as)
+    "        the system before it, or a later system has the request while
+    "        an earlier system does not.
+    " Empty: open request, or fewer than 2 systems to compare.
+    DATA: lv_prev_ts  TYPE char14,
+          lv_prev_imp TYPE abap_bool VALUE abap_true,
+          lv_compared TYPE abap_bool.
+
+    CHECK iv_rel = abap_true AND lines( it_status ) >= 2.
+
+    LOOP AT it_status INTO DATA(ls_status).
+      IF ls_status-imported = abap_false.
+        lv_prev_imp = abap_false.
+        CONTINUE.
+      ENDIF.
+
+      IF lv_prev_imp = abap_false.     " imported here, but not in previous system
+        rv_icon = icon_red_light.
+        RETURN.
+      ENDIF.
+
+      DATA(lv_ts) = CONV char14( |{ ls_status-date }{ ls_status-time }| ).
+      IF lv_prev_ts IS NOT INITIAL.
+        IF lv_ts <= lv_prev_ts.
+          rv_icon = icon_red_light.
+          RETURN.
+        ENDIF.
+        lv_compared = abap_true.
+      ENDIF.
+      lv_prev_ts = lv_ts.
+    ENDLOOP.
+
+    IF lv_compared = abap_true.
+      rv_icon = icon_green_light.
+    ENDIF.
   ENDMETHOD.
 
   METHOD analyse.
@@ -341,6 +396,7 @@ CLASS lcl_report IMPLEMENTATION.
     set_col_text( io_cols = lo_cols iv_col = 'OVERALL'  iv_text = 'Status' ).
     set_col_text( io_cols = lo_cols iv_col = 'CHDATE'   iv_text = 'Changed/Released' ).
     set_col_text( io_cols = lo_cols iv_col = 'ANALYSIS' iv_text = 'Analysis' ).
+    set_col_text( io_cols = lo_cols iv_col = 'SEQ_ICON' iv_text = 'Sequence' ).
 
     " Target system columns - headers use the system IDs, hidden if not used
     DATA(lt_sys) = VALUE string_table( ( CONV #( p_sys1 ) ) ( CONV #( p_sys2 ) ) ( CONV #( p_sys3 ) ) ).
@@ -350,6 +406,7 @@ CLASS lcl_report IMPLEMENTATION.
       set_col_text( io_cols = lo_cols iv_col = |{ lv_prefix }ICON| iv_text = |{ lv_sys }|      iv_hide = lv_hide ).
       set_col_text( io_cols = lo_cols iv_col = |{ lv_prefix }RC|   iv_text = |{ lv_sys } RC|   iv_hide = lv_hide ).
       set_col_text( io_cols = lo_cols iv_col = |{ lv_prefix }DATE| iv_text = |{ lv_sys } date| iv_hide = lv_hide ).
+      set_col_text( io_cols = lo_cols iv_col = |{ lv_prefix }TIME| iv_text = |{ lv_sys } time| iv_hide = lv_hide ).
     ENDLOOP.
 
     " Click on request number -> display request (SE09)
