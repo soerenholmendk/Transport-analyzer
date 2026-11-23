@@ -20,7 +20,7 @@ TABLES e070.
 SELECTION-SCREEN BEGIN OF BLOCK b01 WITH FRAME TITLE TEXT-b01.
   SELECT-OPTIONS: s_trkorr FOR e070-trkorr,
                   s_user   FOR e070-as4user DEFAULT sy-uname,
-                  s_date   FOR e070-as4date,          " creation date
+                  s_date   FOR e070-as4date,          " last changed / released date
                   s_func   FOR e070-trfunction.
   PARAMETERS      p_task AS CHECKBOX DEFAULT abap_true. " also requests where user owns a task
 SELECTION-SCREEN END OF BLOCK b01.
@@ -50,7 +50,6 @@ CLASS lcl_report DEFINITION FINAL.
              trfunction TYPE e070-trfunction,
              trstatus   TYPE e070-trstatus,
              as4user    TYPE e070-as4user,
-             crdate     TYPE e070-as4date,   " created
              chdate     TYPE e070-as4date,   " last changed / released
              s1_icon    TYPE icon_d,
              s1_rc      TYPE char4,
@@ -140,6 +139,7 @@ CLASS lcl_report IMPLEMENTATION.
       FROM e070
       WHERE trkorr     IN @s_trkorr
         AND as4user    IN @s_user
+        AND as4date    IN @s_date
         AND trfunction IN @s_func
         AND strkorr    = @space
       INTO TABLE @mt_req.
@@ -150,6 +150,7 @@ CLASS lcl_report IMPLEMENTATION.
         FROM e070 AS r
         INNER JOIN e070 AS t ON t~strkorr = r~trkorr
         WHERE r~trkorr     IN @s_trkorr
+          AND r~as4date    IN @s_date
           AND r~trfunction IN @s_func
           AND r~strkorr    = @space
           AND t~as4user    IN @s_user
@@ -171,14 +172,7 @@ CLASS lcl_report IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD build_output.
-    DATA lt_create TYPE SORTED TABLE OF e070create WITH UNIQUE KEY trkorr.
-    DATA lt_text   TYPE SORTED TABLE OF e07t WITH NON-UNIQUE KEY trkorr.
-
-    " Creation date (E070-AS4DATE is the last change / release date)
-    SELECT * FROM e070create
-      FOR ALL ENTRIES IN @mt_req
-      WHERE trkorr = @mt_req-trkorr
-      INTO TABLE @lt_create.
+    DATA lt_text TYPE SORTED TABLE OF e07t WITH NON-UNIQUE KEY trkorr.
 
     SELECT * FROM e07t
       FOR ALL ENTRIES IN @mt_req
@@ -191,13 +185,6 @@ CLASS lcl_report IMPLEMENTATION.
                                    trstatus   = ls_req-trstatus
                                    as4user    = ls_req-as4user
                                    chdate     = ls_req-as4date ).
-
-      " Creation date - fall back to last change date if not logged
-      ls_out-crdate = VALUE #( lt_create[ trkorr = ls_req-trkorr ]-as4date
-                               DEFAULT ls_req-as4date ).
-      IF ls_out-crdate NOT IN s_date.
-        CONTINUE.
-      ENDIF.
 
       " Description: logon language first, otherwise any language
       READ TABLE lt_text INTO DATA(ls_text)
@@ -239,7 +226,7 @@ CLASS lcl_report IMPLEMENTATION.
       APPEND ls_out TO mt_out.
     ENDLOOP.
 
-    SORT mt_out BY crdate DESCENDING trkorr DESCENDING.
+    SORT mt_out BY chdate DESCENDING trkorr DESCENDING.
   ENDMETHOD.
 
   METHOD read_cofile.
@@ -345,7 +332,6 @@ CLASS lcl_report IMPLEMENTATION.
     lo_cols->set_optimize( abap_true ).
 
     set_col_text( io_cols = lo_cols iv_col = 'OVERALL'  iv_text = 'Status' ).
-    set_col_text( io_cols = lo_cols iv_col = 'CRDATE'   iv_text = 'Created on' ).
     set_col_text( io_cols = lo_cols iv_col = 'CHDATE'   iv_text = 'Changed/Released' ).
     set_col_text( io_cols = lo_cols iv_col = 'ANALYSIS' iv_text = 'Analysis' ).
 

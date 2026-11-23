@@ -3,7 +3,7 @@
 ABAP report `ZTR_LANDSCAPE_STATUS` that runs in the development system and checks whether transport requests have been imported into the follow-on systems (e.g. QAS and PRD).
 
 ## Features
-- Selection by transport number, owner (incl. task owners), creation date and request type (K/W/T by default)
+- Selection by transport number, owner (incl. task owners), last changed/released date (E070-AS4DATE) and request type (K/W/T by default)
 - Filter: all / open only / released only
 - Up to 3 target systems (default QAS, PRD)
 - Per system: traffic light, return code and import date (read from the transport cofile, same data as the STMS import history)
@@ -18,4 +18,4 @@ ABAP report `ZTR_LANDSCAPE_STATUS` that runs in the development system and check
 
 ## Prerequisites
 - The development system shares the transport directory (`/usr/sap/trans`) with the target systems.
-- Creation date is read from `E070CREATE`; if missing, the last change date from `E070` is used.
+- Runs on SAP NetWeaver / ABAP 7.50 and higher.
