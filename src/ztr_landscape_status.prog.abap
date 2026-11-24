@@ -385,8 +385,9 @@ CLASS lcl_report IMPLEMENTATION.
     " Standard sorting: description, then transport number
     TRY.
         DATA(lo_sorts) = mo_alv->get_sorts( ).
-        lo_sorts->add_sort( columnname = 'AS4TEXT' sequence = if_salv_c_sort=>sort_up ).
-        lo_sorts->add_sort( columnname = 'TRKORR'  sequence = if_salv_c_sort=>sort_up ).
+        lo_sorts->clear( ).
+        lo_sorts->add_sort( columnname = 'AS4TEXT' position = 1 sequence = if_salv_c_sort=>sort_up ).
+        lo_sorts->add_sort( columnname = 'TRKORR'  position = 2 sequence = if_salv_c_sort=>sort_up ).
       CATCH cx_salv_not_found cx_salv_existing cx_salv_data_error.
     ENDTRY.
 
